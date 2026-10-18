@@ -1,4 +1,7 @@
 # QR-Scanner
+
+https://delblock.github.io/QR-Scanner/
+
 รายการ	รายละเอียด
 ชื่อไฟล์	qr-scanner.html
 ภาษา	HTML + JavaScript
