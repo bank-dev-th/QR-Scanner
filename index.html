@@ -41,6 +41,10 @@
             overflow: hidden;
             margin-bottom: 20px;
             aspect-ratio: 4/3;
+            transition: opacity 0.3s;
+        }
+        .scanner-box.paused {
+            opacity: 0.5;
         }
         video {
             width: 100%;
@@ -269,6 +273,26 @@
         input:checked + .toggle-slider:before {
             transform: translateX(20px);
         }
+        .paused-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            z-index: 10;
+            border-radius: 16px;
+            display: none;
+        }
+        .paused-overlay.show {
+            display: flex;
+        }
     </style>
 </head>
 <body>
@@ -284,7 +308,7 @@
             <canvas id="canvas"></canvas>
             
             <div class="scan-frame">
-                <div class="scan-line"></div>
+                <div class="scan-line" id="scanLine"></div>
                 <div class="corner corner-tl"></div>
                 <div class="corner corner-tr"></div>
                 <div class="corner corner-bl"></div>
@@ -292,6 +316,11 @@
             </div>
             
             <button class="flash-btn" id="flashBtn" onclick="toggleFlash()">🔦</button>
+            
+            <!-- ข้อความแสดงเมื่อหยุดสแกน -->
+            <div class="paused-overlay" id="pausedOverlay">
+                ⏸️ หยุดสแกนแล้ว
+            </div>
         </div>
 
         <!-- แจ้งเตือนขอสิทธิ์ -->
@@ -322,9 +351,9 @@
                 <span class="link-badge" id="linkBadge">🔗 ลิงก์เว็บไซต์</span>
                 <p class="result-text" id="resultText"></p>
                 <div class="btn-row">
-                    <button class="btn-open" id="openBtn" onclick="openLink()">🌐 เปิดลิงก์ทันที</button>
+                    <button class="btn-open" id="openBtn" onclick="openLinkAndPause()">🌐 เปิดลิงก์ทันที</button>
                     <button class="btn-copy" onclick="copyResult()">📋 คัดลอก</button>
-                    <button class="btn-secondary" onclick="rescan()">🔄 สแกนใหม่</button>
+                    <button class="btn-primary" onclick="rescan()">🔄 สแกนต่อ</button>
                 </div>
             </div>
         </div>
@@ -343,6 +372,9 @@ const linkBadge = document.getElementById('linkBadge');
 const autoNotice = document.getElementById('autoNotice');
 const autoOpenToggle = document.getElementById('autoOpenToggle');
 const flashBtn = document.getElementById('flashBtn');
+const scannerBox = document.getElementById('scannerBox');
+const scanLine = document.getElementById('scanLine');
+const pausedOverlay = document.getElementById('pausedOverlay');
 
 let scanning = true;
 let stream = null;
@@ -369,11 +401,42 @@ function fixUrl(text) {
     return text;
 }
 
-// เปิดลิงก์
-function openLink() {
+// ✅ ปิดกล้องและหยุดสแกน
+function stopCamera() {
+    scanning = false;
+    
+    if (autoOpenTimer) {
+        clearInterval(autoOpenTimer);
+        autoOpenTimer = null;
+    }
+    
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    
+    video.pause();
+    video.srcObject = null;
+    
+    if (track && track.getCapabilities().torch) {
+        track.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
+    }
+    flashOn = false;
+    flashBtn.classList.remove('on');
+    
+    scannerBox.classList.add('paused');
+    scanLine.style.animationPlayState = 'paused';
+    pausedOverlay.classList.add('show');
+    
+    statusText.textContent = '⏸️ หยุดสแกนแล้ว — กด "สแกนต่อ" เพื่อใช้งานอีกครั้ง';
+}
+
+// ✅ เปิดลิงก์แล้วปิดกล้อง
+function openLinkAndPause() {
     if (!detectedCode) return;
     const url = fixUrl(detectedCode);
     window.open(url, '_blank');
+    stopCamera();
 }
 
 // เริ่มต้นกล้อง
@@ -393,9 +456,14 @@ async function initCamera() {
         video.srcObject = stream;
         track = stream.getVideoTracks()[0];
         
+        scannerBox.classList.remove('paused');
+        scanLine.style.animationPlayState = 'running';
+        pausedOverlay.classList.remove('show');
+        
         statusText.textContent = '✅ พร้อมสแกน — ชี้กล้องไปที่คิวอาร์โค้ด';
         
         video.onloadedmetadata = function() {
+            scanning = true;
             requestAnimationFrame(scanQRCode);
         };
         
@@ -408,10 +476,7 @@ async function initCamera() {
 
 // สแกนคิวอาร์โค้ด
 function scanQRCode() {
-    if (!scanning) {
-        requestAnimationFrame(scanQRCode);
-        return;
-    }
+    if (!scanning) return;
     
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
         canvas.width = video.videoWidth;
@@ -447,10 +512,9 @@ function showResult(text) {
         autoNotice.style.display = 'block';
         statusText.textContent = '✅ พบลิงก์เว็บไซต์';
         
-        // เปิดลิงก์อัตโนมัติ ถ้าเปิดใช้งานอยู่
         if (autoOpenToggle.checked) {
             let countdown = 3;
-            autoNotice.innerHTML = `✅ พบลิงก์ → เปิดอัตโนมัติใน <span id="countdown">${countdown}</span> วินาที...`;
+            autoNotice.innerHTML = `✅ พบลิงก์ → เปิดและหยุดสแกนใน <span id="countdown">${countdown}</span> วินาที...`;
             
             autoOpenTimer = setInterval(() => {
                 countdown--;
@@ -459,22 +523,17 @@ function showResult(text) {
                 
                 if (countdown <= 0) {
                     clearInterval(autoOpenTimer);
-                    openLink();
+                    openLinkAndPause();
                 }
             }, 1000);
         } else {
-            autoNotice.innerHTML = 'ℹ️ เปิดลิงก์อัตโนมัติปิดอยู่ — กดปุ่ม "เปิดลิงก์ทันที" ด้านล่าง';
+            autoNotice.innerHTML = 'ℹ️ เปิดลิงก์อัตโนมัติปิดอยู่ — กดปุ่ม "เปิดลิงก์ทันที"';
         }
     } else {
         linkBadge.style.display = 'none';
         openBtn.style.display = 'none';
         autoNotice.style.display = 'none';
-        statusText.textContent = '✅ อ่านข้อมูลสำเร็จ';
-        
-        if (autoOpenTimer) {
-            clearInterval(autoOpenTimer);
-            autoOpenTimer = null;
-        }
+        statusText.textContent = '✅ อ่านข้อมูลสำเร็จ — กด "สแกนต่อ" เพื่อสแกนใหม่';
     }
 }
 
@@ -485,17 +544,15 @@ function copyResult() {
     });
 }
 
-// สแกนใหม่
+// สแกนใหม่ - เปิดกล้องอีกครั้ง
 function rescan() {
     if (autoOpenTimer) {
         clearInterval(autoOpenTimer);
         autoOpenTimer = null;
     }
     resultBox.classList.remove('show');
-    statusText.textContent = '✅ พร้อมสแกน — ชี้กล้องไปที่คิวอาร์โค้ด';
     detectedCode = '';
-    scanning = true;
-    requestAnimationFrame(scanQRCode);
+    initCamera();
 }
 
 // เปิด-ปิดไฟแฟลช
@@ -532,7 +589,7 @@ async function requestWakeLock() {
     }
 }
 document.addEventListener('visibilitychange', async () => {
-    if (wakeLock && document.visibilityState === 'visible') {
+    if (wakeLock && document.visibilityState === 'visible' && scanning) {
         requestWakeLock();
     }
 });
