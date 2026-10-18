@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📱 สแกนคิวอาร์โค้ด</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #1e1b4b, #312e81, #4f46e5);
+            min-height: 100vh;
+            color: white;
+            padding: 20px 15px;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .header h1 {
+            font-size: clamp(24px, 6vw, 32px);
+            margin-bottom: 8px;
+        }
+        .header p {
+            color: #a5b4fc;
+            font-size: 14px;
+        }
+        .scanner-box {
+            position: relative;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            aspect-ratio: 4/3;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        canvas {
+            display: none;
+        }
+        .scan-frame {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 220px;
+            height: 220px;
+            border: 3px solid #10b981;
+            border-radius: 12px;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+        }
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 10%;
+            width: 80%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #10b981, transparent);
+            animation: scan 2s linear infinite;
+        }
+        @keyframes scan {
+            0% { top: 0; opacity: 1; }
+            50% { top: 100%; opacity: 0.8; }
+            100% { top: 0; opacity: 1; }
+        }
+        .corner {
+            position: absolute;
+            width: 25px;
+            height: 25px;
+            border-color: #10b981;
+            border-width: 3px;
+        }
+        .corner-tl { top: -3px; left: -3px; border-right: none; border-bottom: none; border-radius: 10px 0 0 0; }
+        .corner-tr { top: -3px; right: -3px; border-left: none; border-bottom: none; border-radius: 0 10px 0 0; }
+        .corner-bl { bottom: -3px; left: -3px; border-right: none; border-top: none; border-radius: 0 0 0 10px; }
+        .corner-br { bottom: -3px; right: -3px; border-left: none; border-top: none; border-radius: 0 0 10px 0; }
+        
+        .status-box {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .status-text {
+            font-size: 15px;
+            color: #a5b4fc;
+            margin-bottom: 10px;
+        }
+        .result-box {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid #10b981;
+            border-radius: 12px;
+            padding: 15px;
+            display: none;
+        }
+        .result-box.show {
+            display: block;
+        }
+        .result-label {
+            font-size: 12px;
+            color: #6ee7b7;
+            margin-bottom: 8px;
+        }
+        .result-text {
+            font-size: 14px;
+            word-break: break-all;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            flex: 1;
+            min-width: 100px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(90deg, #10b981, #059669);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .btn-copy {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-open {
+            background: #8b5cf6;
+            color: white;
+        }
+        .permission-note {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid #f87171;
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+            display: none;
+        }
+        .permission-note.show {
+            display: block;
+        }
+        .permission-note h3 {
+            color: #fca5a5;
+            margin-bottom: 10px;
+        }
+        .permission-note p {
+            color: #fecaca;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .flash-btn {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .flash-btn.on {
+            background: rgba(255, 255, 0, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 สแกนคิวอาร์โค้ด</h1>
+            <p>ชี้กล้องไปที่คิวอาร์โค้ด เพื่ออ่านข้อมูล</p>
+        </div>
+
+        <!-- กล้องสแกน -->
+        <div class="scanner-box" id="scannerBox">
+            <video id="camera" autoplay playsinline muted></video>
+            <canvas id="canvas"></canvas>
+            
+            <div class="scan-frame">
+                <div class="scan-line"></div>
+                <div class="corner corner-tl"></div>
+                <div class="corner corner-tr"></div>
+                <div class="corner corner-bl"></div>
+                <div class="corner corner-br"></div>
+            </div>
+            
+            <button class="flash-btn" id="flashBtn" onclick="toggleFlash()">🔦</button>
+        </div>
+
+        <!-- แจ้งเตือนขอสิทธิ์ -->
+        <div class="permission-note" id="permissionNote">
+            <h3>📷 ต้องการสิทธิ์ใช้กล้อง</h3>
+            <p>กรุณาอนุญาตการเข้าถึงกล้องเพื่อใช้งานเครื่องสแกน</p>
+            <button class="btn-primary" onclick="initCamera()">ลองอีกครั้ง</button>
+        </div>
+
+        <!-- ส่วนสถานะและผลลัพธ์ -->
+        <div class="status-box">
+            <p class="status-text" id="statusText">⏳ กำลังเตรียมกล้อง...</p>
+            
+            <div class="result-box" id="resultBox">
+                <p class="result-label">✅ ผลลัพธ์:</p>
+                <p class="result-text" id="resultText"></p>
+                <div class="btn-row">
+                    <button class="btn-copy" onclick="copyResult()">📋 คัดลอก</button>
+                    <button class="btn-open" id="openBtn" onclick="openLink()">🌐 เปิดลิงก์</button>
+                    <button class="btn-secondary" onclick="rescan()">🔄 สแกนใหม่</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+const video = document.getElementById('camera');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const statusText = document.getElementById('statusText');
+const resultBox = document.getElementById('resultBox');
+const resultText = document.getElementById('resultText');
+const permissionNote = document.getElementById('permissionNote');
+const openBtn = document.getElementById('openBtn');
+const flashBtn = document.getElementById('flashBtn');
+
+let scanning = true;
+let stream = null;
+let detectedCode = '';
+let track = null;
+let flashOn = false;
+
+// เริ่มต้นกล้อง
+async function initCamera() {
+    try {
+        permissionNote.classList.remove('show');
+        statusText.textContent = '⏳ กำลังขอสิทธิ์กล้อง...';
+        
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: { 
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        });
+        
+        video.srcObject = stream;
+        track = stream.getVideoTracks()[0];
+        
+        statusText.textContent = '✅ พร้อมสแกน — ชี้กล้องไปที่คิวอาร์โค้ด';
+        
+        video.onloadedmetadata = function() {
+            requestAnimationFrame(scanQRCode);
+        };
+        
+    } catch (err) {
+        console.error('Camera error:', err);
+        permissionNote.classList.add('show');
+        statusText.textContent = '❌ ไม่สามารถเข้าถึงกล้องได้';
+    }
+}
+
+// สแกนคิวอาร์โค้ด
+function scanQRCode() {
+    if (!scanning) {
+        requestAnimationFrame(scanQRCode);
+        return;
+    }
+    
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert'
+        });
+        
+        if (code) {
+            scanning = false;
+            detectedCode = code.data;
+            showResult(detectedCode);
+            return;
+        }
+    }
+    
+    requestAnimationFrame(scanQRCode);
+}
+
+// แสดงผลลัพธ์
+function showResult(text) {
+    resultText.textContent = text;
+    resultBox.classList.add('show');
+    statusText.textContent = '✅ พบคิวอาร์โค้ด';
+    
+    // ตรวจสอบว่าเป็นลิงก์หรือไม่
+    const isUrl = /^(http|https|www)\./i.test(text) || text.includes('.com') || text.includes('.co.th');
+    openBtn.style.display = isUrl ? 'block' : 'none';
+}
+
+// คัดลอกผลลัพธ์
+function copyResult() {
+    navigator.clipboard.writeText(detectedCode).then(() => {
+        alert('✅ คัดลอกเรียบร้อย!');
+    });
+}
+
+// เปิดลิงก์
+function openLink() {
+    if (/^(http|https):\/\//i.test(detectedCode)) {
+        window.open(detectedCode, '_blank');
+    } else {
+        window.open('https://' + detectedCode, '_blank');
+    }
+}
+
+// สแกนใหม่
+function rescan() {
+    resultBox.classList.remove('show');
+    statusText.textContent = '✅ พร้อมสแกน — ชี้กล้องไปที่คิวอาร์โค้ด';
+    detectedCode = '';
+    scanning = true;
+    requestAnimationFrame(scanQRCode);
+}
+
+// เปิด-ปิดไฟแฟลช
+async function toggleFlash() {
+    if (!track) return;
+    
+    try {
+        const capabilities = track.getCapabilities();
+        if (!capabilities.torch) {
+            alert('❌ อุปกรณ์ของคุณไม่รองรับไฟแฟลช');
+            return;
+        }
+        
+        flashOn = !flashOn;
+        await track.applyConstraints({
+            advanced: [{ torch: flashOn }]
+        });
+        flashBtn.classList.toggle('on', flashOn);
+    } catch (err) {
+        alert('❌ ไม่สามารถเปิดไฟแฟลชได้');
+    }
+}
+
+// เริ่มทำงาน
+window.onload = initCamera;
+
+// ป้องกันหน้าจอล็อก
+let wakeLock = null;
+async function requestWakeLock() {
+    try {
+        wakeLock = await navigator.wakeLock.request('screen');
+    } catch (err) {
+        console.log('Wake Lock not supported');
+    }
+}
+document.addEventListener('visibilitychange', async () => {
+    if (wakeLock && document.visibilityState === 'visible') {
+        requestWakeLock();
+    }
+});
+requestWakeLock();
+
+</script>
+</body>
+</html>
